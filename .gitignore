@@ -1,0 +1,24 @@
+# Dependencies
+/node_modules
+/vendor
+
+# Environment
+.env
+nimipay_auth.php
+
+# IDE
+.vscode
+.idea
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build
+/dist
+/build

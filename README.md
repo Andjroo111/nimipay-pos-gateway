@@ -1,52 +1,105 @@
-## Nimipay - Simple and Flexible Payments Gateway
+# Nimipay PoS
 
-Demo: https://nimipay.com
+A Point of Sale (PoS) implementation for Nimiq blockchain payments.
 
-Nimipay creates an overlayed UI for the interaction with the user's NIM wallet, shopping cart, and items.
+## Features
 
-It also creates a new record in the database, using the user's wallet address as the unique identifier for the user's data.
+- PoS-optimized transaction processing with 2-block confirmation
+- Decimal place handling for PoS (4 decimal places)
+- Hub API integration for secure wallet interactions
+- Real-time price conversion (USD/NIM)
+- Invoice management and tracking
+- Transaction status monitoring
 
-With the help of the new Nimiq Hub API, the UI allows the user to pay for invoices. Then the transaction hash is returned for the backend validation. After the transaction is confirmed, the user receives a new item. It can then be seen under the Items tab.
+## Multi-Currency Support
 
-Being a modal window, Nimipay is shown on top of any website, and without the need to re-design the website in order to integrate a webshop.
+Nimipay PoS supports multiple cryptocurrencies:
+- NIM (Nimiq 2.0)
+- BTC (Bitcoin)
+- UST (TerraUSD)
+- USDC (USD Coin)
 
-Nimipay is all-in-one, but lightweight (~30 kb). To make it possible, some rough simplifications were made. The code is vanilla JavaScript/PHP, you can extend and customize it.
+Each currency has specific configuration requirements detailed below.
 
-The app is experimental. Use it at your own risk.
-<br>
-<br>
+## Merchant Setup
 
-**Front-end** `nimipay.js`
+1. PoS Wallet Configuration:
+   - Generate a dedicated PoS wallet address (NQ97 prefix required)
+   - Ensure wallet has sufficient balance for transaction fees
+   - Enable auto-confirmation for faster processing
+   - Set up webhook notifications (optional)
 
-- [Reef.js](https://github.com/cferdinandi/reef) (4kb) anti-framework for reactive UI components
-- [Nimiq Hub API](https://nimiq.github.io/hub/quick-start) for simple payments processing
+2. Multi-Currency Configuration:
+   - NIM: Uses native Nimiq 2.0 PoS protocol
+   - BTC: Configure Lightning Network endpoints
+   - UST/USDC: Set up Terra/ERC-20 bridges
 
-The total Nimipay javascript bundle is ~30 kb and a few kb of CSS.
-<br>
-<br>
+3. Security Settings:
+   - Enable 2FA for merchant dashboard
+   - Set transaction limits
+   - Configure allowed payment methods
+   - Set up email notifications
 
-**Back-end** `nimipay.php`
+## Setup
 
-- [MeekroDB](https://meekro.com/) PHP library for simple and secure MySQL queries
+1. Database Configuration:
+   - Import `nimipay.sql` to create required tables
+   - Update database credentials in `nimipay_auth.php`
 
-For the database structure, use `nimipay.sql`
-<br>
-<br>
+2. Configure PoS settings in `nimipay_auth.php`:
+   - Set your PoS wallet address (must start with NQ97 for mainnet)
+   - Configure RPC endpoint if needed
 
-**Quickstart and examples**
+3. Deploy the files to your web server:
+   ```
+   nimipay.php
+   nimipay_auth.php
+   nimipay.js
+   nimipay.css
+   index.html
+   ```
 
-See https://nimipay.com
-<br>
-<br>
+## Usage
 
-**Issues**
+1. Add payment button to your site:
+   ```html
+   <button id="np-add-item">Pay with NIM</button>
+   ```
 
-Report issues in [issue tracker](https://github.com/giekaton/nimipay/issues).
-<br>
-<br>
+2. Initialize Nimipay:
+   ```html
+   <script src="nimipay.js"></script>
+   ```
 
-**Contribution**
+3. Process payments:
+   - Customer clicks payment button
+   - Connects their Nimiq wallet
+   - Confirms payment
+   - Transaction is processed with 2-block confirmation
+   - Order is activated upon confirmation
 
-Feel free to make a pull request or suggest ideas.
-<br>
-<br>
+## API Endpoints
+
+- `/nimipay.php?action=sendUserAddress` - Wallet connection
+- `/nimipay.php?action=npAddItem` - Create new invoice
+- `/nimipay.php?action=sendTxHash` - Process transaction
+- `/nimipay.php?action=validateTx` - Validate transaction status
+
+## Development
+
+To run locally:
+1. Set up a local web server (e.g., Apache, Nginx)
+2. Configure database connection
+3. Deploy files to web root
+4. Access via localhost
+
+## Testing
+
+Basic integration tests are included for core functionality:
+- Wallet integration
+- Transaction processing
+- Invoice management
+
+Run tests:
+```bash
+./run_tests.sh
