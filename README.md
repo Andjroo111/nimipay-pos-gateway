@@ -1,105 +1,232 @@
-# Nimipay PoS
+# NimiPay Payment Gateway
 
-A Point of Sale (PoS) implementation for Nimiq blockchain payments.
+A multi-currency cryptocurrency payment gateway supporting BTC, USDC, and UST with gas abstraction.
 
 ## Features
 
-- PoS-optimized transaction processing with 2-block confirmation
-- Decimal place handling for PoS (4 decimal places)
-- Hub API integration for secure wallet interactions
-- Real-time price conversion (USD/NIM)
-- Invoice management and tracking
-- Transaction status monitoring
+- Multiple cryptocurrency support:
+  - Bitcoin (BTC)
+  - USD Coin (USDC) with gas abstraction
+  - Terra USD (UST)
+- Platform integrations:
+  - WordPress/WooCommerce
+  - Wix
+  - Squarespace
+- Automatic exchange rate updates
+- Transaction monitoring
+- Comprehensive API
+- Security features
 
-## Multi-Currency Support
+## Installation
 
-Nimipay PoS supports multiple cryptocurrencies:
-- NIM (Nimiq 2.0)
-- BTC (Bitcoin)
-- UST (TerraUSD)
-- USDC (USD Coin)
+### WordPress Plugin
 
-Each currency has specific configuration requirements detailed below.
+1. Download the latest release
+2. Upload to wp-content/plugins/
+3. Activate through WordPress admin
+4. Configure in WooCommerce > Settings > Payments
 
-## Merchant Setup
+Detailed instructions: [WordPress Integration Guide](integrations/wordpress/README.md)
 
-1. PoS Wallet Configuration:
-   - Generate a dedicated PoS wallet address (NQ97 prefix required)
-   - Ensure wallet has sufficient balance for transaction fees
-   - Enable auto-confirmation for faster processing
-   - Set up webhook notifications (optional)
+### Wix Integration
 
-2. Multi-Currency Configuration:
-   - NIM: Uses native Nimiq 2.0 PoS protocol
-   - BTC: Configure Lightning Network endpoints
-   - UST/USDC: Set up Terra/ERC-20 bridges
+1. Add custom element to your site
+2. Configure API keys
+3. Add payment button to checkout
 
-3. Security Settings:
-   - Enable 2FA for merchant dashboard
-   - Set transaction limits
-   - Configure allowed payment methods
-   - Set up email notifications
+Detailed instructions: [Wix Integration Guide](integrations/wix/README.md)
 
-## Setup
+### Squarespace Integration
 
-1. Database Configuration:
-   - Import `nimipay.sql` to create required tables
-   - Update database credentials in `nimipay_auth.php`
+1. Enable code injection
+2. Add header and footer code
+3. Configure API keys
 
-2. Configure PoS settings in `nimipay_auth.php`:
-   - Set your PoS wallet address (must start with NQ97 for mainnet)
-   - Configure RPC endpoint if needed
+Detailed instructions: [Squarespace Integration Guide](integrations/squarespace/README.md)
 
-3. Deploy the files to your web server:
-   ```
-   nimipay.php
-   nimipay_auth.php
-   nimipay.js
-   nimipay.css
-   index.html
-   ```
+## API Documentation
 
-## Usage
+### Authentication
 
-1. Add payment button to your site:
-   ```html
-   <button id="np-add-item">Pay with NIM</button>
-   ```
+```bash
+# API Key authentication
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+     https://api.nimipay.com/v1/payments
+```
 
-2. Initialize Nimipay:
-   ```html
-   <script src="nimipay.js"></script>
-   ```
+### Create Payment
 
-3. Process payments:
-   - Customer clicks payment button
-   - Connects their Nimiq wallet
-   - Confirms payment
-   - Transaction is processed with 2-block confirmation
-   - Order is activated upon confirmation
+```bash
+curl -X POST https://api.nimipay.com/v1/payments \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "amount": 100.00,
+       "currency": "USDC",
+       "success_url": "https://your-site.com/success",
+       "cancel_url": "https://your-site.com/cancel"
+     }'
+```
 
-## API Endpoints
+### Get Payment Status
 
-- `/nimipay.php?action=sendUserAddress` - Wallet connection
-- `/nimipay.php?action=npAddItem` - Create new invoice
-- `/nimipay.php?action=sendTxHash` - Process transaction
-- `/nimipay.php?action=validateTx` - Validate transaction status
+```bash
+curl https://api.nimipay.com/v1/payments/PAYMENT_ID \
+     -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Get Exchange Rates
+
+```bash
+curl https://api.nimipay.com/v1/exchange-rates \
+     -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Webhook Events
+
+```json
+{
+  "event": "payment.completed",
+  "data": {
+    "payment_id": "pay_123",
+    "status": "completed",
+    "amount": 100.00,
+    "currency": "USDC"
+  }
+}
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# API Configuration
+NIMIPAY_API_KEY=your_api_key
+NIMIPAY_TEST_MODE=true
+
+# Network Configuration
+NIMIPAY_ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR-PROJECT-ID
+NIMIPAY_TERRA_LCD_URL=https://lcd.terra.dev
+
+# Gas Abstraction
+NIMIPAY_MAX_GAS_PRICE=100 # in gwei
+NIMIPAY_GAS_PRICE_BUFFER=1.2 # 20% buffer
+
+# Security
+NIMIPAY_WEBHOOK_SECRET=your_webhook_secret
+NIMIPAY_RATE_LIMIT=100 # requests per minute
+```
+
+### Currency Configuration
+
+```json
+{
+  "BTC": {
+    "decimals": 8,
+    "min_amount": 0.00001,
+    "max_amount": 100,
+    "confirmations": {
+      "mainnet": 2,
+      "testnet": 1
+    }
+  },
+  "USDC": {
+    "decimals": 6,
+    "min_amount": 1,
+    "max_amount": 1000000,
+    "confirmations": {
+      "mainnet": 12,
+      "testnet": 5
+    }
+  },
+  "UST": {
+    "decimals": 6,
+    "min_amount": 1,
+    "max_amount": 1000000,
+    "confirmations": {
+      "mainnet": 15,
+      "testnet": 5
+    }
+  }
+}
+```
 
 ## Development
 
-To run locally:
-1. Set up a local web server (e.g., Apache, Nginx)
-2. Configure database connection
-3. Deploy files to web root
-4. Access via localhost
+### Requirements
 
-## Testing
+- PHP 7.4+
+- Node.js 14+
+- Composer
+- WordPress 5.0+ (for WP integration)
 
-Basic integration tests are included for core functionality:
-- Wallet integration
-- Transaction processing
-- Invoice management
+### Setup
 
-Run tests:
 ```bash
-./run_tests.sh
+# Install dependencies
+composer install
+npm install
+
+# Build assets
+npm run build
+
+# Run tests
+composer test
+npm test
+
+# Start development server
+npm run dev
+```
+
+### Testing
+
+```bash
+# Unit tests
+composer test:unit
+
+# Integration tests
+composer test:integration
+
+# E2E tests
+npm run test:e2e
+
+# Coverage report
+composer test:coverage
+```
+
+## Security
+
+### Best Practices
+
+1. Always use HTTPS
+2. Validate all user input
+3. Keep dependencies updated
+4. Monitor transactions
+5. Use rate limiting
+6. Implement proper error handling
+
+### Known Issues
+
+See [SECURITY.md](SECURITY.md) for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## Support
+
+- Documentation: https://docs.nimipay.com
+- Issues: https://github.com/nimipay/gateway/issues
+- Email: support@nimipay.com
+- Discord: https://discord.gg/nimipay
+
+## License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
