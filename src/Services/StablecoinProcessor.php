@@ -16,17 +16,26 @@ class StablecoinProcessor {
                 'mainnet' => 12,
                 'testnet' => 5
             ]
+        ],
+        'UST' => [
+            'decimals' => 6,
+            'confirmations' => [
+                'mainnet' => 15,
+                'testnet' => 5
+            ]
         ]
     ];
     
     public function __construct(
         UsdcTransactionHandler $usdcHandler,
+        UstTransactionHandler $ustHandler,
         GasAbstractionService $gasService,
         ContractInteractionService $contractService,
         PriceService $priceService,
         string $network = 'mainnet'
     ) {
         $this->usdcHandler = $usdcHandler;
+        $this->ustHandler = $ustHandler;
         $this->gasService = $gasService;
         $this->contractService = $contractService;
         $this->priceService = $priceService;
@@ -34,9 +43,38 @@ class StablecoinProcessor {
     }
     
     /**
+     * Process stablecoin payment
+     */
+    public function processStablecoinPayment(
+        string $currency,
+        string $customerAddress,
+        string $merchantAddress,
+        int $amount,
+        array $options = []
+    ): array {
+        try {
+            // Validate currency
+            if (!isset(self::SUPPORTED_COINS[$currency])) {
+                throw new \Exception('Unsupported currency');
+            }
+            
+            switch ($currency) {
+                case 'USDC':
+                    return $this->processUsdcPayment($customerAddress, $merchantAddress, $amount, $options);
+                case 'UST':
+                    return $this->processUstPayment($customerAddress, $merchantAddress, $amount, $options);
+                default:
+                    throw new \Exception('Unsupported currency');
+            }
+        } catch (\Exception $e) {
+            throw new \Exception("Payment failed: " . $e->getMessage());
+        }
+    }
+
+    /**
      * Process USDC payment
      */
-    public function processUsdcPayment(
+    private function processUsdcPayment(
         string $customerAddress,
         string $merchantAddress,
         int $amount,
@@ -138,42 +176,126 @@ class StablecoinProcessor {
     }
     
     /**
-     * Validate USDC transaction
+     * Process UST payment
      */
-    public function validateUsdcTransaction(
-        string $txHash,
-        int $expectedAmount,
+    private function processUstPayment(
+        string $customerAddress,
+        string $merchantAddress,
+        int $amount,
+        array $options = []
+    ): array {
+        try {
+            // Execute transfer
+            $result = $this->ustHandler->sendTransaction(
+                $customerAddress,
+                $merchantAddress,
+                $amount,
+                $options
+            );
+            
+            // Add additional transaction details
+            return array_merge($result, [
+                'currency' => 'UST',
+                'amount' => $amount,
+                'customerAddress' => $customerAddress,
+                'merchantAddress' => $merchantAddress,
+                'timestamp' => time()
+            ]);
+            
+        } catch (\Exception $e) {
+            throw new \Exception('UST payment failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Validate transaction
+     */
+    public function validateTransaction(
+        string $currency,
+        string $txHash, 
+        int $expectedAmount, 
         string $expectedRecipient
     ): bool {
         try {
-            // Get transaction receipt
-            $receipt = $this->contractService->waitForConfirmation($txHash);
-            
-            if ($receipt['receipt']->status !== '0x1') {
-                throw new \Exception('Transaction failed');
+            switch ($currency) {
+                case 'USDC':
+                    return $this->validateUsdcTransaction($txHash, $expectedAmount, $expectedRecipient);
+                case 'UST':
+                    return $this->validateUstTransaction($txHash, $expectedAmount, $expectedRecipient);
+                default:
+                    throw new \Exception('Unsupported currency');
             }
-            
-            // Decode transfer event
-            $events = $this->contractService->decodeEventLog(
-                'USDC',
-                'Transfer',
-                $receipt['receipt']->logs[0]
-            );
-            
-            // Verify amount and recipient
-            if ($events['value'] !== $expectedAmount) {
-                throw new \Exception('Invalid transfer amount');
-            }
-            
-            if (strtolower($events['to']) !== strtolower($expectedRecipient)) {
-                throw new \Exception('Invalid recipient');
-            }
-            
-            return true;
             
         } catch (\Exception $e) {
             throw new \Exception('Transaction validation failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Validate USDC transaction
+     */
+    private function validateUsdcTransaction(
+        string $txHash,
+        int $expectedAmount,
+        string $expectedRecipient
+    ): bool {
+        // Get transaction receipt
+        $receipt = $this->contractService->waitForConfirmation($txHash);
+        
+        if ($receipt['receipt']->status !== '0x1') {
+            throw new \Exception('Transaction failed');
+        }
+        
+        // Decode transfer event
+        $events = $this->contractService->decodeEventLog(
+            'USDC',
+            'Transfer',
+            $receipt['receipt']->logs[0]
+        );
+        
+        // Verify amount and recipient
+        if ($events['value'] !== $expectedAmount) {
+            throw new \Exception('Invalid transfer amount');
+        }
+        
+        if (strtolower($events['to']) !== strtolower($expectedRecipient)) {
+            throw new \Exception('Invalid recipient');
+        }
+        
+        return true;
+    }
+
+    /**
+     * Validate UST transaction
+     */
+    private function validateUstTransaction(
+        string $txHash,
+        int $expectedAmount,
+        string $expectedRecipient
+    ): bool {
+        // Get transaction details
+        $details = $this->ustHandler->getTransactionDetails($txHash);
+        
+        // Verify transaction status
+        if ($details['status'] !== 'success') {
+            throw new \Exception('Transaction failed');
+        }
+        
+        // Get transaction info
+        $txInfo = $this->ustHandler->getTransactionDetails($txHash);
+        
+        // Verify amount and recipient
+        $msgSend = $txInfo['tx']['value']['msg'][0]['value'];
+        
+        if ((int) $msgSend['amount'][0]['amount'] !== $expectedAmount) {
+            throw new \Exception('Invalid transfer amount');
+        }
+        
+        if ($msgSend['to_address'] !== $expectedRecipient) {
+            throw new \Exception('Invalid recipient');
+        }
+        
+        return true;
     }
     
     /**
