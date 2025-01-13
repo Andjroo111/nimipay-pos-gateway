@@ -1,21 +1,41 @@
 // Initialize the Nimiq Hub API
 const hubApi = new HubApi('https://wallet.nimiq.com');
 
-// Price API endpoints
+// Currency configurations
 const CURRENCY_CONFIG = {
     NIM: {
         name: 'Nimiq',
         symbol: 'NIM',
         icon: 'https://api.nimiq.com/identicon/NIM.png',
         decimals: 4,
-        minConfirmations: 2
+        minConfirmations: 2,
+        type: 'native'
     },
     BTC: {
         name: 'Bitcoin',
         symbol: 'BTC',
         icon: 'img/btc-icon.png',
         decimals: 8,
-        minConfirmations: 3
+        minConfirmations: 3,
+        type: 'native'
+    },
+    USDC: {
+        name: 'USD Coin',
+        symbol: 'USDC',
+        icon: 'img/usdc-icon.png',
+        decimals: 6,
+        minConfirmations: 12,
+        type: 'erc20',
+        network: 'ethereum'
+    },
+    UST: {
+        name: 'TerraUSD',
+        symbol: 'UST',
+        icon: 'img/ust-icon.png',
+        decimals: 6,
+        minConfirmations: 15,
+        type: 'terra',
+        network: 'terra'
     }
 };
 
@@ -29,15 +49,14 @@ let np = new Reef('#nimipay', {
         selectedCurrency: 'NIM',
         invoices: [],
         items: [],
-        userBalanceNim: null,
-        userBalanceBtc: null,
-        userBalanceUsd: null,
+        balances: {},
         invoicesString: '',
         itemsString: '',
         checkoutFeedback: '',
         invoicesCount: 0,
         itemsCount: 0,
-        exchangeRates: {}
+        exchangeRates: {},
+        gasFee: null
     },
     template: function (props) {
         return '<div class="np-modal-window" id="np-modal">'+
@@ -54,13 +73,10 @@ let np = new Reef('#nimipay', {
                          </div>`
                     ).join('') +
                 '</div>'+
-                '<div id="identicon"><img src="https://api.nimiq.com/identicon/'+props.result.address.replace(/\s/g, '')+'.png"></div>'+
-                '<span id="output"><span style="font-size:14px;">'+props.result.address+'<br>'+props.result.label+'</span></span>'+
-                getCurrencyBalanceDisplay(props)+
+                getCurrencyDisplay(props)+
                 '<div style="height:5px;"></div>'+
                 '<div class="np-wallet-func">'+
-                    '<a href="https://changelly.com" class="np-link" target="_blank">Top Up</a> | '+
-                    '<a href="https://wallet.nimiq.com" target="_blank">Backup</a>'+
+                    getWalletFunctions(props)+
                 '</div>'+
             '</div>'+
             '<div class="np-tabs">'+
@@ -74,33 +90,144 @@ let np = new Reef('#nimipay', {
     }
 });
 
-function getCurrencyBalanceDisplay(props) {
-    let display = '<div id="balance"><br>';
+function getCurrencyDisplay(props) {
+    const currency = CURRENCY_CONFIG[props.selectedCurrency];
+    const balance = props.balances[props.selectedCurrency];
     
-    if (props.selectedCurrency === 'NIM' && props.userBalanceNim !== null) {
-        display += `Balance: ${props.userBalanceNim} NIM (${props.userBalanceUsd} USD)`;
-    } else if (props.selectedCurrency === 'BTC' && props.userBalanceBtc !== null) {
-        display += `Balance: ${props.userBalanceBtc} BTC (${props.userBalanceUsd} USD)`;
+    let display = '<div class="np-currency-info">';
+    
+    // Show address and identicon for native chains
+    if (currency.type === 'native') {
+        display += `<div id="identicon">
+            <img src="${getIdenticon(props.result.address, props.selectedCurrency)}">
+        </div>
+        <span id="output">
+            <span style="font-size:14px;">${props.result.address}<br>${props.result.label}</span>
+        </span>`;
+    }
+    
+    // Show balance
+    display += '<div id="balance"><br>';
+    if (balance !== undefined) {
+        const usdValue = balance * (props.exchangeRates[props.selectedCurrency] || 0);
+        display += `Balance: ${formatAmount(balance, currency.decimals)} ${currency.symbol} ($${usdValue.toFixed(2)})`;
+        
+        // Show gas fee estimate for ERC20 tokens
+        if (currency.type === 'erc20' && props.gasFee !== null) {
+            display += `<br>Estimated Gas Fee: ${props.gasFee} ETH`;
+        }
     } else {
         display += 'Fetching balance...';
     }
+    display += '</div></div>';
     
-    display += '</div>';
     return display;
+}
+
+function getWalletFunctions(props) {
+    const currency = CURRENCY_CONFIG[props.selectedCurrency];
+    let functions = [];
+    
+    // Add relevant wallet functions based on currency type
+    switch (currency.type) {
+        case 'native':
+            functions.push('<a href="https://changelly.com" class="np-link" target="_blank">Top Up</a>');
+            if (props.selectedCurrency === 'NIM') {
+                functions.push('<a href="https://wallet.nimiq.com" target="_blank">Backup</a>');
+            }
+            break;
+        case 'erc20':
+            functions.push('<a href="https://app.uniswap.org" class="np-link" target="_blank">Swap</a>');
+            functions.push('<a href="https://etherscan.io" target="_blank">Explorer</a>');
+            break;
+        case 'terra':
+            functions.push('<a href="https://station.terra.money" class="np-link" target="_blank">Station</a>');
+            functions.push('<a href="https://finder.terra.money" target="_blank">Explorer</a>');
+            break;
+    }
+    
+    return functions.join(' | ');
+}
+
+function getIdenticon(address, currency) {
+    switch (currency) {
+        case 'NIM':
+            return `https://api.nimiq.com/identicon/${address}.png`;
+        case 'BTC':
+            return `img/btc-identicon.png`; // Placeholder
+        default:
+            return CURRENCY_CONFIG[currency].icon;
+    }
 }
 
 async function npSelectCurrency(currency) {
     np.data.selectedCurrency = currency;
-    await npGetBalance();
+    np.data.gasFee = null;
+    
+    // Clear existing balance
+    delete np.data.balances[currency];
+    
+    // Get new balance and exchange rate
+    await Promise.all([
+        npGetBalance(currency),
+        npGetExchangeRate(currency)
+    ]);
+    
+    // Get gas fee estimate for ERC20 tokens
+    if (CURRENCY_CONFIG[currency].type === 'erc20') {
+        try {
+            const response = await fetch(`${npBackendUrl}?action=estimateGasFee&currency=${currency}`);
+            const data = await response.json();
+            np.data.gasFee = data.fee;
+        } catch (error) {
+            console.error('Failed to estimate gas fee:', error);
+        }
+    }
+    
     await npInvoicesPriceInCrypto();
 }
 
-// Utility function to fetch price with fallback and retries
-async function fetchPrice(currency, retries = 3, delay = 1000) {
-    const response = await fetch(`${npBackendUrl}?action=getPrice&currency=${currency}`);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-    return data.rate;
+async function npGetBalance(currency) {
+    try {
+        const config = CURRENCY_CONFIG[currency];
+        let balance;
+        
+        switch (config.type) {
+            case 'native':
+                if (currency === 'NIM') {
+                    const response = await fetch(`https://rpc.nimiq.com/account/${np.data.result.address}`);
+                    const data = await response.json();
+                    balance = data.balance / Math.pow(10, config.decimals);
+                } else if (currency === 'BTC') {
+                    // Implement BTC balance check
+                }
+                break;
+                
+            case 'erc20':
+                // Get USDC balance through Web3
+                break;
+                
+            case 'terra':
+                // Get UST balance through Terra API
+                break;
+        }
+        
+        if (balance !== undefined) {
+            np.data.balances[currency] = balance;
+        }
+    } catch (error) {
+        console.error(`Failed to fetch ${currency} balance:`, error);
+    }
+}
+
+async function npGetExchangeRate(currency) {
+    try {
+        const response = await fetch(`${npBackendUrl}?action=getPrice&currency=${currency}`);
+        const data = await response.json();
+        np.data.exchangeRates[currency] = data.rate;
+    } catch (error) {
+        console.error(`Failed to fetch ${currency} exchange rate:`, error);
+    }
 }
 
 async function npCheckout(id_invoice) {
@@ -112,25 +239,42 @@ async function npCheckout(id_invoice) {
 
     const invoice = np.data.invoices[index];
     const currency = np.data.selectedCurrency;
+    const config = CURRENCY_CONFIG[currency];
     
     try {
-        // Get current price
-        const rate = await fetchPrice(currency);
-        const cryptoAmount = (invoice.value_usd / rate).toFixed(CURRENCY_CONFIG[currency].decimals);
+        // Get current price and convert amount
+        const rate = np.data.exchangeRates[currency];
+        if (!rate) {
+            throw new Error('Exchange rate not available');
+        }
+        
+        const cryptoAmount = (invoice.value_usd / rate).toFixed(config.decimals);
         
         // Check balance
-        const balance = currency === 'NIM' ? np.data.userBalanceNim : np.data.userBalanceBtc;
+        const balance = np.data.balances[currency];
         if (Number(cryptoAmount) > Number(balance)) {
             document.getElementById('np-error-'+id_invoice).innerHTML = 
                 `<div style="margin-top:5px;margin-bottom:10px;color:red;">Insufficient ${currency} balance</div>`;
             return;
         }
 
-        // Process payment based on currency
-        if (currency === 'NIM') {
-            await processNimPayment(invoice, cryptoAmount);
-        } else if (currency === 'BTC') {
-            await processBtcPayment(invoice, cryptoAmount);
+        // Process payment based on currency type
+        switch (config.type) {
+            case 'native':
+                if (currency === 'NIM') {
+                    await processNimPayment(invoice, cryptoAmount);
+                } else if (currency === 'BTC') {
+                    await processBtcPayment(invoice, cryptoAmount);
+                }
+                break;
+                
+            case 'erc20':
+                await processUSDCPayment(invoice, cryptoAmount);
+                break;
+                
+            case 'terra':
+                await processUSTPayment(invoice, cryptoAmount);
+                break;
         }
 
     } catch (error) {
@@ -154,21 +298,56 @@ async function processNimPayment(invoice, amount) {
 }
 
 async function processBtcPayment(invoice, amount) {
-    // Implement BTC payment flow here
-    // This would typically involve generating a BTC address and monitoring it
-    // For now, we'll show a simplified flow
+    // Implement BTC payment flow
     const btcAddress = await getBtcPaymentAddress();
+    showBtcPaymentInfo(invoice.id_invoice, btcAddress, amount);
+}
+
+async function processUSDCPayment(invoice, amount) {
+    // Show gas fee warning
+    if (!confirm(`This transaction requires ETH for gas (estimated: ${np.data.gasFee} ETH). Continue?`)) {
+        return;
+    }
     
-    document.getElementById('np-invoice-'+invoice.id_invoice).innerHTML = 
+    // Implement USDC payment through Web3
+    showERC20PaymentInfo(invoice.id_invoice, amount);
+}
+
+async function processUSTPayment(invoice, amount) {
+    // Implement UST payment through Terra Station
+    showTerraPaymentInfo(invoice.id_invoice, amount);
+}
+
+function showBtcPaymentInfo(invoiceId, address, amount) {
+    document.getElementById('np-invoice-'+invoiceId).innerHTML = 
         `<div class="btc-payment-info">
             <p>Send exactly ${amount} BTC to:</p>
-            <div class="btc-address">${btcAddress}</div>
-            <div class="qr-code" id="qr-${invoice.id_invoice}"></div>
+            <div class="btc-address">${address}</div>
+            <div class="qr-code" id="qr-${invoiceId}"></div>
             <p>Waiting for payment...</p>
         </div>`;
     
-    // Start monitoring for payment
-    startPaymentMonitor(invoice.id_invoice, btcAddress, amount);
+    // Generate QR code
+    generateQRCode('qr-'+invoiceId, `bitcoin:${address}?amount=${amount}`);
+}
+
+function showERC20PaymentInfo(invoiceId, amount) {
+    document.getElementById('np-invoice-'+invoiceId).innerHTML = 
+        `<div class="erc20-payment-info">
+            <p>Confirm the transaction in your Ethereum wallet</p>
+            <p>Amount: ${amount} USDC</p>
+            <p>Estimated Gas: ${np.data.gasFee} ETH</p>
+            <span class="np-loading np-line"></span>
+        </div>`;
+}
+
+function showTerraPaymentInfo(invoiceId, amount) {
+    document.getElementById('np-invoice-'+invoiceId).innerHTML = 
+        `<div class="terra-payment-info">
+            <p>Confirm the transaction in Terra Station</p>
+            <p>Amount: ${amount} UST</p>
+            <span class="np-loading np-line"></span>
+        </div>`;
 }
 
 async function handlePaymentResponse(id_invoice, txHash, currency) {
@@ -183,7 +362,9 @@ async function handlePaymentResponse(id_invoice, txHash, currency) {
     await npTxBackendValidate(txHash, id_invoice, currency);
 }
 
-// ... (rest of the existing functions, updated to handle currency parameter)
+function formatAmount(amount, decimals) {
+    return Number(amount).toFixed(decimals);
+}
 
 // Add necessary CSS
 const style = document.createElement('style');
@@ -192,35 +373,65 @@ style.textContent = `
         display: flex;
         justify-content: center;
         margin-bottom: 15px;
+        flex-wrap: wrap;
     }
     .np-currency-option {
         padding: 8px 15px;
-        margin: 0 5px;
+        margin: 5px;
         border: 1px solid #ddd;
         border-radius: 4px;
         cursor: pointer;
         display: flex;
         align-items: center;
+        transition: all 0.2s ease;
     }
     .np-currency-option.selected {
         background: #f0f0f0;
         border-color: #999;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .np-currency-option img {
-        width: 20px;
-        height: 20px;
+        width: 24px;
+        height: 24px;
         margin-right: 8px;
+        border-radius: 12px;
     }
-    .btc-payment-info {
+    .np-currency-info {
+        text-align: center;
+        padding: 10px;
+    }
+    .btc-payment-info,
+    .erc20-payment-info,
+    .terra-payment-info {
         text-align: center;
         padding: 15px;
     }
-    .btc-address {
+    .btc-address,
+    .eth-address {
         background: #f5f5f5;
         padding: 10px;
         margin: 10px 0;
         word-break: break-all;
         font-family: monospace;
+        border-radius: 4px;
+    }
+    .qr-code {
+        margin: 15px auto;
+        width: 200px;
+        height: 200px;
+    }
+    .np-loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 `;
 document.head.appendChild(style);

@@ -5,16 +5,18 @@ namespace Nimipay\Services;
 class PaymentProcessor {
     private $config;
     private $priceService;
+    private $stablecoinProcessor;
 
     public function __construct() {
         $this->config = require __DIR__ . '/../../config/currency_config.php';
         $this->priceService = new PriceService();
+        $this->stablecoinProcessor = new StablecoinProcessor();
     }
 
     /**
      * Validate and process a transaction
      * 
-     * @param string $currency Currency code (NIM, BTC)
+     * @param string $currency Currency code (NIM, BTC, USDC, UST)
      * @param string $txHash Transaction hash
      * @param string $address Sender address
      * @param float $expectedAmount Expected payment amount in crypto
@@ -32,51 +34,33 @@ class PaymentProcessor {
             throw new \Exception(sprintf($this->config['errors']['invalid_address'], $currency));
         }
 
-        // Get transaction details based on currency
-        $txDetails = $this->getTransactionDetails($currency, $txHash);
-        
-        // Verify confirmations
-        if ($txDetails['confirmations'] < $currencyConfig['min_confirmations']) {
-            return [
-                'status' => 'pending',
-                'confirmations' => $txDetails['confirmations'],
-                'required_confirmations' => $currencyConfig['min_confirmations']
-            ];
+        // Validate amount limits
+        if ($expectedAmount < $currencyConfig['validation']['min_amount']) {
+            throw new \Exception(sprintf($this->config['errors']['amount_too_low'], $currency));
+        }
+        if ($expectedAmount > $currencyConfig['validation']['max_amount']) {
+            throw new \Exception(sprintf($this->config['errors']['amount_too_high'], $currency));
         }
 
-        // Verify amount (with small tolerance for floating point)
-        $receivedAmount = $txDetails['amount'];
-        $tolerance = pow(10, -$currencyConfig['decimals']); // One unit of smallest denomination
-        if (abs($receivedAmount - $expectedAmount) > $tolerance) {
-            throw new \Exception("Payment amount mismatch");
-        }
-
-        return [
-            'status' => 'confirmed',
-            'confirmations' => $txDetails['confirmations'],
-            'amount' => $receivedAmount,
-            'sender' => $txDetails['sender']
-        ];
-    }
-
-    /**
-     * Get transaction details from appropriate blockchain
-     */
-    private function getTransactionDetails($currency, $txHash) {
+        // Process transaction based on currency type
         switch ($currency) {
             case 'NIM':
-                return $this->getNimiqTransaction($txHash);
+                return $this->validateNimiqTransaction($txHash, $expectedAmount, $address);
             case 'BTC':
-                return $this->getBitcoinTransaction($txHash);
+                return $this->validateBitcoinTransaction($txHash, $expectedAmount, $address);
+            case 'USDC':
+                return $this->stablecoinProcessor->validateUSDCTransaction($txHash, $expectedAmount, $address);
+            case 'UST':
+                return $this->stablecoinProcessor->validateUSTTransaction($txHash, $expectedAmount, $address);
             default:
-                throw new \Exception("Unsupported currency for transaction verification");
+                throw new \Exception("Unsupported currency for transaction validation");
         }
     }
 
     /**
-     * Get Nimiq transaction details
+     * Validate Nimiq transaction
      */
-    private function getNimiqTransaction($txHash) {
+    private function validateNimiqTransaction($txHash, $expectedAmount, $address) {
         $rpcEndpoint = $this->config['currencies']['NIM']['rpc_endpoint'];
         
         $rpcData = [
@@ -92,20 +76,40 @@ class PaymentProcessor {
             throw new \Exception("Failed to fetch Nimiq transaction");
         }
 
+        $tx = $response['result'];
+        $confirmations = $tx['confirmations'];
+        
+        if ($confirmations < $this->config['currencies']['NIM']['min_confirmations']) {
+            return [
+                'status' => 'pending',
+                'confirmations' => $confirmations,
+                'required_confirmations' => $this->config['currencies']['NIM']['min_confirmations']
+            ];
+        }
+
+        // Verify amount
+        $receivedAmount = $tx['value'] / pow(10, $this->config['currencies']['NIM']['decimals']);
+        $tolerance = pow(10, -$this->config['currencies']['NIM']['decimals']);
+        
+        if (abs($receivedAmount - $expectedAmount) > $tolerance) {
+            throw new \Exception("Payment amount mismatch");
+        }
+
         return [
-            'confirmations' => $response['result']['confirmations'],
-            'amount' => $response['result']['value'] / pow(10, $this->config['currencies']['NIM']['decimals']),
-            'sender' => $response['result']['fromAddress']
+            'status' => 'confirmed',
+            'confirmations' => $confirmations,
+            'amount' => $receivedAmount,
+            'sender' => $tx['fromAddress']
         ];
     }
 
     /**
-     * Get Bitcoin transaction details
+     * Validate Bitcoin transaction
      */
-    private function getBitcoinTransaction($txHash) {
+    private function validateBitcoinTransaction($txHash, $expectedAmount, $address) {
         $rpcEndpoint = $this->config['currencies']['BTC']['rpc_endpoint'];
         
-        // First get raw transaction
+        // Get raw transaction
         $rpcData = [
             "jsonrpc" => "2.0",
             "method" => "getrawtransaction",
@@ -119,7 +123,9 @@ class PaymentProcessor {
             throw new \Exception("Failed to fetch Bitcoin transaction");
         }
 
-        // Get current block height for confirmation calculation
+        $tx = $response['result'];
+        
+        // Get current block height
         $blockHeightData = [
             "jsonrpc" => "2.0",
             "method" => "getblockcount",
@@ -134,20 +140,36 @@ class PaymentProcessor {
         }
 
         $currentHeight = $heightResponse['result'];
-        $txHeight = $response['result']['blockheight'] ?? null;
+        $txHeight = $tx['blockheight'] ?? null;
         $confirmations = $txHeight ? ($currentHeight - $txHeight + 1) : 0;
 
-        // Calculate total received amount (sum of relevant outputs)
-        $amount = 0;
-        foreach ($response['result']['vout'] as $output) {
-            // Add logic here to verify output address matches expected recipient
-            $amount += $output['value'];
+        if ($confirmations < $this->config['currencies']['BTC']['min_confirmations']) {
+            return [
+                'status' => 'pending',
+                'confirmations' => $confirmations,
+                'required_confirmations' => $this->config['currencies']['BTC']['min_confirmations']
+            ];
+        }
+
+        // Verify amount
+        $receivedAmount = 0;
+        foreach ($tx['vout'] as $output) {
+            if (isset($output['scriptPubKey']['addresses']) && 
+                in_array($address, $output['scriptPubKey']['addresses'])) {
+                $receivedAmount += $output['value'];
+            }
+        }
+
+        $tolerance = pow(10, -$this->config['currencies']['BTC']['decimals']);
+        if (abs($receivedAmount - $expectedAmount) > $tolerance) {
+            throw new \Exception("Payment amount mismatch");
         }
 
         return [
+            'status' => 'confirmed',
             'confirmations' => $confirmations,
-            'amount' => $amount,
-            'sender' => $response['result']['vin'][0]['address'] ?? null // Simplified; might need more complex input analysis
+            'amount' => $receivedAmount,
+            'sender' => $tx['vin'][0]['address'] ?? null
         ];
     }
 
@@ -179,5 +201,25 @@ class PaymentProcessor {
         }
 
         return $decoded;
+    }
+
+    /**
+     * Get transaction explorer URL
+     */
+    public function getExplorerUrl($currency, $txHash) {
+        return sprintf(
+            $this->config['currencies'][$currency]['explorer_tx_url'],
+            $txHash
+        );
+    }
+
+    /**
+     * Estimate gas fees for USDC transactions
+     */
+    public function estimateGasFee($currency) {
+        if ($currency === 'USDC') {
+            return $this->stablecoinProcessor->estimateUSDCGasFee();
+        }
+        return 0; // No gas fees for other currencies
     }
 }
