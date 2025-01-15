@@ -1,0 +1,148 @@
+# Shopify App Configuration
+name = "NimiPay Crypto Payments"
+handle = "nimipay-crypto-payments"
+client_id = "{{env.SHOPIFY_APP_API_KEY}}"
+application_url = "https://app.nimipay.com/shopify"
+embedded = true
+
+[access_scopes]
+# Required scopes for the app to function
+scopes = [
+    "read_orders",
+    "write_orders",
+    "read_products",
+    "read_payment_terms",
+    "write_payment_terms",
+    "read_shipping",
+    "write_shipping"
+]
+
+[auth]
+# Auth configuration
+redirect_urls = [
+    "https://app.nimipay.com/shopify/auth/callback",
+    "https://app.nimipay.com/shopify/auth/fallback"
+]
+
+[webhooks]
+# Webhook endpoints
+api_version = "2024-01"
+
+[[webhooks.subscriptions]]
+path = "/webhooks/orders/paid"
+topic = "orders/paid"
+format = "json"
+
+[[webhooks.subscriptions]]
+path = "/webhooks/orders/cancelled"
+topic = "orders/cancelled"
+format = "json"
+
+[pos]
+# POS configuration
+embedded = false
+
+[app_preferences]
+# App preferences
+url = "https://app.nimipay.com/shopify/preferences"
+
+[app_preferences.tabs]
+default = "Settings"
+items = [
+    { label = "Settings", target = "settings" },
+    { label = "Transactions", target = "transactions" },
+    { label = "Analytics", target = "analytics" }
+]
+
+[billing]
+# Billing configuration
+recurring_fee = {
+    amount = 0,
+    interval = "EVERY_30_DAYS",
+    currency_code = "USD"
+}
+
+[capabilities]
+# App capabilities
+api_access = true
+single_merchant = false
+multi_merchant = true
+payment_provider = true
+
+[extension_directories]
+# Extension directories
+source = "extensions"
+output = "dist/extensions"
+
+[build]
+# Build configuration
+dev_store_url = "nimipay-test.myshopify.com"
+include_config_on_deploy = true
+
+[post_deploy]
+# Post-deploy hooks
+url = "https://app.nimipay.com/shopify/post-deploy"
+timeout = 30
+
+[app_proxy]
+# App proxy configuration
+url = "https://app.nimipay.com/shopify/proxy"
+subpath = "nimipay"
+prefix = "apps"
+
+[requirements]
+# App requirements
+shopify_plus = false
+shop_plan = "ANY"
+
+[settings]
+# App settings schema
+[[settings.fields]]
+key = "api_key"
+type = "string"
+name = "NimiPay API Key"
+description = "Your NimiPay API key from the dashboard"
+required = true
+
+[[settings.fields]]
+key = "test_mode"
+type = "boolean"
+name = "Test Mode"
+description = "Enable test mode for development"
+default = false
+
+[[settings.fields]]
+key = "supported_currencies"
+type = "array"
+name = "Supported Cryptocurrencies"
+description = "Select which cryptocurrencies to accept"
+default = ["BTC", "USDC"]
+items = {
+    type = "string",
+    enum = ["BTC", "ETH", "USDC", "UST", "NIM"]
+}
+
+[[settings.fields]]
+key = "confirmation_blocks"
+type = "object"
+name = "Confirmation Requirements"
+description = "Number of block confirmations required per currency"
+properties = {
+    BTC = { type = "number", default = 2 },
+    ETH = { type = "number", default = 12 },
+    USDC = { type = "number", default = 12 },
+    UST = { type = "number", default = 15 },
+    NIM = { type = "number", default = 2 }
+}
+
+[locales]
+# Supported locales
+available = ["en", "es", "fr", "de", "it", "ja", "ko", "zh-CN", "zh-TW"]
+default = "en"
+fallback = "en"
+
+[privacy]
+# Privacy configuration
+customer_data_request_url = "https://app.nimipay.com/shopify/data-request"
+customer_data_erasure_url = "https://app.nimipay.com/shopify/data-erasure"
+shop_data_erasure_url = "https://app.nimipay.com/shopify/shop-erasure"
