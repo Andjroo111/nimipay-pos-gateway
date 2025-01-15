@@ -1,152 +1,162 @@
-/* NimiPay Payment Gateway Styles */
+/* Nimipay Payment Gateway Styles */
 
-.nimipay-payment-form {
+.wc-nimipay-form {
     padding: 20px;
     background: #f8f9fa;
     border-radius: 4px;
     margin-bottom: 20px;
 }
 
-/* Currency Selection */
-.currency-selection {
-    margin-bottom: 20px;
-}
-
-.currency-selection label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: #333;
-}
-
-.currency-selection select {
-    width: 100%;
-    padding: 10px;
+.wc-nimipay-payment-box {
     border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: #fff;
-    font-size: 14px;
-}
-
-.currency-selection select:focus {
-    outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
-}
-
-/* Payment Details */
-.payment-details {
-    background: #fff;
     padding: 15px;
+    margin: 10px 0;
+    background: #fff;
     border-radius: 4px;
-    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.amount-display {
-    text-align: center;
-    margin-bottom: 20px;
+.wc-nimipay-payment-method {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.wc-nimipay-payment-method:hover {
+    background: #f5f5f5;
+    border-color: #ddd;
+}
+
+.wc-nimipay-payment-method.selected {
+    border-color: #2271b1;
+    background: #f0f7ff;
+}
+
+.wc-nimipay-payment-method img {
+    width: 32px;
+    height: 32px;
+    margin-right: 10px;
+}
+
+.wc-nimipay-payment-method-label {
+    flex-grow: 1;
+    font-weight: 500;
+}
+
+.wc-nimipay-payment-details {
+    margin-top: 15px;
     padding: 15px;
     background: #f8f9fa;
     border-radius: 4px;
-    font-size: 18px;
 }
 
-.amount-display .equals {
-    margin: 0 10px;
-    color: #6c757d;
+.wc-nimipay-qr-code {
+    text-align: center;
+    margin: 20px 0;
 }
 
-.nimipay-crypto-amount {
-    font-weight: 600;
-    color: #28a745;
+.wc-nimipay-qr-code img {
+    max-width: 200px;
+    height: auto;
 }
 
-/* Payment Information */
-.payment-info {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid #e9ecef;
+.wc-nimipay-address {
+    font-family: monospace;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin: 10px 0;
+    word-break: break-all;
 }
 
-.confirmation-info,
-.fee-info {
-    flex: 1;
-    padding: 0 15px;
-}
-
-.confirmation-info h4,
-.fee-info h4 {
+.wc-nimipay-copy-button {
+    background: #2271b1;
+    color: #fff;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
     font-size: 14px;
-    color: #495057;
-    margin-bottom: 10px;
-    font-weight: 600;
+    transition: background 0.3s ease;
 }
 
-.confirmation-info ul,
-.fee-info ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
+.wc-nimipay-copy-button:hover {
+    background: #135e96;
 }
 
-.confirmation-info li,
-.fee-info li {
-    font-size: 13px;
-    color: #6c757d;
-    margin-bottom: 8px;
-    padding-left: 20px;
-    position: relative;
+.wc-nimipay-status {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: 500;
 }
 
-.confirmation-info li:before,
-.fee-info li:before {
-    content: "•";
-    position: absolute;
-    left: 0;
-    color: #007bff;
+.wc-nimipay-status.pending {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
 }
 
-/* Currency-specific styles */
-.btc-info {
-    color: #f7931a !important;
+.wc-nimipay-status.processing {
+    background: #cce5ff;
+    color: #004085;
+    border: 1px solid #b8daff;
 }
 
-.usdc-info {
-    color: #2775ca !important;
+.wc-nimipay-status.completed {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
 }
 
-.ust-info {
-    color: #5493f7 !important;
-}
-
-/* Error Messages */
-.woocommerce-error {
-    border-left-color: #dc3545;
-    background-color: #f8d7da;
+.wc-nimipay-status.failed {
+    background: #f8d7da;
     color: #721c24;
+    border: 1px solid #f5c6cb;
 }
 
-/* Loading States */
-.nimipay-loading {
-    position: relative;
-    pointer-events: none;
-    opacity: 0.7;
+.wc-nimipay-timer {
+    text-align: center;
+    margin: 15px 0;
+    font-size: 16px;
+    font-weight: 500;
 }
 
-.nimipay-loading:after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 50%;
+.wc-nimipay-instructions {
+    margin: 15px 0;
+    padding: 15px;
+    background: #e9ecef;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.wc-nimipay-error {
+    color: #dc3545;
+    margin: 10px 0;
+    padding: 10px;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+}
+
+/* Loading Animation */
+.wc-nimipay-loading {
+    display: inline-block;
     width: 20px;
     height: 20px;
-    margin: -10px 0 0 -10px;
-    border: 2px solid #f3f3f3;
-    border-top: 2px solid #007bff;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #2271b1;
     border-radius: 50%;
     animation: nimipay-spin 1s linear infinite;
+    margin-right: 10px;
 }
 
 @keyframes nimipay-spin {
@@ -156,141 +166,59 @@
 
 /* Responsive Design */
 @media screen and (max-width: 768px) {
-    .payment-info {
+    .wc-nimipay-form {
+        padding: 15px;
+    }
+
+    .wc-nimipay-payment-method {
         flex-direction: column;
+        text-align: center;
     }
-    
-    .confirmation-info,
-    .fee-info {
-        padding: 15px 0;
+
+    .wc-nimipay-payment-method img {
+        margin: 0 0 10px 0;
     }
-    
-    .confirmation-info {
-        border-bottom: 1px solid #e9ecef;
-    }
-    
-    .amount-display {
-        font-size: 16px;
+
+    .wc-nimipay-qr-code img {
+        max-width: 150px;
     }
 }
 
-/* Admin Settings */
-.woocommerce table.form-table .nimipay-api-key {
-    width: 400px;
-}
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .wc-nimipay-form {
+        background: #2c2c2c;
+    }
 
-.nimipay-settings-description {
-    font-style: italic;
-    color: #666;
-    margin-top: 5px;
-}
+    .wc-nimipay-payment-box {
+        background: #383838;
+        border-color: #444;
+    }
 
-/* Currency Icons */
-.nimipay-currency-icon {
-    width: 24px;
-    height: 24px;
-    margin-right: 8px;
-    vertical-align: middle;
-}
+    .wc-nimipay-payment-method {
+        border-color: #444;
+    }
 
-/* Payment Status */
-.payment-status {
-    padding: 10px;
-    margin-top: 15px;
-    border-radius: 4px;
-    text-align: center;
-    font-weight: 600;
-}
+    .wc-nimipay-payment-method:hover {
+        background: #404040;
+    }
 
-.payment-status.pending {
-    background-color: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeeba;
-}
+    .wc-nimipay-payment-method.selected {
+        background: #1a3d5c;
+    }
 
-.payment-status.processing {
-    background-color: #cce5ff;
-    color: #004085;
-    border: 1px solid #b8daff;
-}
+    .wc-nimipay-payment-details {
+        background: #2c2c2c;
+    }
 
-.payment-status.completed {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
+    .wc-nimipay-address {
+        background: #383838;
+        border-color: #444;
+        color: #fff;
+    }
 
-.payment-status.failed {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-}
-
-/* Tooltip */
-.nimipay-tooltip {
-    position: relative;
-    display: inline-block;
-    margin-left: 5px;
-    cursor: help;
-}
-
-.nimipay-tooltip .tooltip-text {
-    visibility: hidden;
-    width: 200px;
-    background-color: #333;
-    color: #fff;
-    text-align: center;
-    border-radius: 4px;
-    padding: 5px;
-    position: absolute;
-    z-index: 1;
-    bottom: 125%;
-    left: 50%;
-    margin-left: -100px;
-    opacity: 0;
-    transition: opacity 0.3s;
-    font-size: 12px;
-    line-height: 1.4;
-}
-
-.nimipay-tooltip:hover .tooltip-text {
-    visibility: visible;
-    opacity: 1;
-}
-
-/* Confirmation Progress */
-.confirmation-progress {
-    margin-top: 15px;
-    background-color: #e9ecef;
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-.confirmation-progress-bar {
-    height: 4px;
-    background-color: #007bff;
-    transition: width 0.3s ease;
-}
-
-/* Network Selection */
-.network-selection {
-    margin-top: 15px;
-    padding: 10px;
-    background-color: #f8f9fa;
-    border-radius: 4px;
-}
-
-.network-option {
-    display: inline-block;
-    margin-right: 10px;
-    padding: 5px 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.network-option.active {
-    background-color: #007bff;
-    color: #fff;
-    border-color: #0056b3;
+    .wc-nimipay-instructions {
+        background: #2c2c2c;
+        color: #ddd;
+    }
 }

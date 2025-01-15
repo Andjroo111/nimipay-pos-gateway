@@ -1,201 +1,275 @@
 /* global nimipayParams */
-
 (function($) {
     'use strict';
 
-    const NimiPay = {
+    const NimipayCheckout = {
         init: function() {
-            this.form = $('form.checkout, form#order_review');
-            this.paymentMethod = $('#payment_method_nimipay');
-            this.currencySelect = $('#nimipay_currency');
-            this.exchangeRates = {};
-            
-            this.initEvents();
-            this.initExchangeRates();
+            this.form = $('form.checkout');
+            this.paymentBox = $('.wc-nimipay-payment-box');
+            this.selectedMethod = null;
+            this.paymentTimer = null;
+            this.pollInterval = null;
+
+            this.initializeEventListeners();
+            this.initializePaymentMethods();
         },
-        
-        initEvents: function() {
-            // Currency selection
-            this.currencySelect.on('change', this.onCurrencyChange.bind(this));
+
+        initializeEventListeners: function() {
+            // Payment method selection
+            $(document).on('click', '.wc-nimipay-payment-method', this.handlePaymentMethodSelect.bind(this));
+            
+            // Copy address button
+            $(document).on('click', '.wc-nimipay-copy-button', this.handleCopyAddress.bind(this));
             
             // Form submission
-            this.form.on('checkout_place_order_nimipay', this.onSubmit.bind(this));
-            
-            // Payment method selection
-            $('body').on('payment_method_selected', this.onPaymentMethodSelect.bind(this));
+            this.form.on('checkout_place_order_nimipay', this.handleFormSubmit.bind(this));
         },
-        
-        initExchangeRates: function() {
-            $.ajax({
-                url: nimipayParams.ajaxUrl,
-                data: {
-                    action: 'nimipay_get_rates',
-                    nonce: nimipayParams.nonce
-                },
-                method: 'POST',
-                success: (response) => {
-                    if (response.success) {
-                        this.exchangeRates = response.data;
-                        this.updateAmounts();
-                    }
+
+        initializePaymentMethods: function() {
+            const methods = [
+                { id: 'nim', name: 'Nimiq (NIM)', icon: 'nim-icon.png' },
+                { id: 'btc', name: 'Bitcoin (BTC)', icon: 'btc-icon.png' },
+                { id: 'usdc', name: 'USD Coin (USDC)', icon: 'usdc-icon.png' }
+            ];
+
+            const methodsHtml = methods.map(method => `
+                <div class="wc-nimipay-payment-method" data-method="${method.id}">
+                    <img src="${nimipayParams.pluginUrl}/assets/images/${method.icon}" alt="${method.name}">
+                    <span class="wc-nimipay-payment-method-label">${method.name}</span>
+                </div>
+            `).join('');
+
+            this.paymentBox.html(methodsHtml);
+        },
+
+        handlePaymentMethodSelect: function(e) {
+            const method = $(e.currentTarget).data('method');
+            $('.wc-nimipay-payment-method').removeClass('selected');
+            $(e.currentTarget).addClass('selected');
+            this.selectedMethod = method;
+
+            // Update hidden input for form submission
+            $('#nimipay_selected_method').val(method);
+        },
+
+        handleCopyAddress: function(e) {
+            e.preventDefault();
+            const address = $('.wc-nimipay-address').text();
+            
+            // Use modern clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(address).then(() => {
+                    this.showMessage('Address copied to clipboard!', 'success');
+                }).catch(() => {
+                    this.showMessage('Failed to copy address', 'error');
+                });
+            } else {
+                // Fallback for older browsers
+                const textarea = document.createElement('textarea');
+                textarea.value = address;
+                textarea.style.position = 'fixed';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    this.showMessage('Address copied to clipboard!', 'success');
+                } catch (err) {
+                    this.showMessage('Failed to copy address', 'error');
                 }
+                document.body.removeChild(textarea);
+            }
+        },
+
+        handleFormSubmit: function() {
+            if (!this.selectedMethod) {
+                this.showMessage('Please select a payment method', 'error');
+                return false;
+            }
+
+            // Show loading state
+            this.showLoading();
+
+            // Create payment and get payment details
+            return $.ajax({
+                url: nimipayParams.ajaxUrl,
+                method: 'POST',
+                data: {
+                    action: 'nimipay_create_payment',
+                    nonce: nimipayParams.nonce,
+                    method: this.selectedMethod,
+                    order_id: $('input[name="order_id"]').val()
+                }
+            })
+            .done(response => {
+                if (response.success) {
+                    this.showPaymentDetails(response.data);
+                    this.startPaymentPolling(response.data.payment_id);
+                    return true;
+                } else {
+                    this.showMessage(response.data.message, 'error');
+                    return false;
+                }
+            })
+            .fail(() => {
+                this.showMessage('Payment initialization failed', 'error');
+                return false;
+            })
+            .always(() => {
+                this.hideLoading();
             });
         },
-        
-        onCurrencyChange: function(e) {
-            const currency = $(e.target).val();
-            this.updateAmounts(currency);
+
+        showPaymentDetails: function(data) {
+            const detailsHtml = `
+                <div class="wc-nimipay-payment-details">
+                    <div class="wc-nimipay-qr-code">
+                        <img src="${data.qr_code_url}" alt="Payment QR Code">
+                    </div>
+                    <div class="wc-nimipay-address">
+                        ${data.payment_address}
+                    </div>
+                    <button class="wc-nimipay-copy-button">
+                        Copy Address
+                    </button>
+                    <div class="wc-nimipay-timer">
+                        Time remaining: <span class="countdown">15:00</span>
+                    </div>
+                    <div class="wc-nimipay-instructions">
+                        ${data.instructions}
+                    </div>
+                    <div class="wc-nimipay-status pending">
+                        Waiting for payment...
+                    </div>
+                </div>
+            `;
+
+            this.paymentBox.html(detailsHtml);
+            this.startPaymentTimer();
         },
-        
-        updateAmounts: function(currency) {
-            if (!currency) {
-                currency = this.currencySelect.val();
-            }
-            
-            if (!currency || !this.exchangeRates[currency]) {
-                return;
-            }
-            
-            const rate = this.exchangeRates[currency];
-            const fiatAmount = parseFloat($('.order-total .amount').first().text().replace(/[^0-9.]/g, ''));
-            const cryptoAmount = this.formatAmount(fiatAmount * rate, currency);
-            
-            $('.nimipay-crypto-amount').text(cryptoAmount + ' ' + currency);
-        },
-        
-        formatAmount: function(amount, currency) {
-            switch (currency) {
-                case 'BTC':
-                    return amount.toFixed(8);
-                case 'USDC':
-                case 'UST':
-                    return amount.toFixed(6);
-                default:
-                    return amount.toFixed(2);
-            }
-        },
-        
-        onSubmit: function() {
-            if (!this.validateForm()) {
-                return false;
-            }
-            
-            // Add currency to form data
-            const currency = this.currencySelect.val();
-            $('<input>').attr({
-                type: 'hidden',
-                name: 'nimipay_currency',
-                value: currency
-            }).appendTo(this.form);
-            
-            return true;
-        },
-        
-        validateForm: function() {
-            const currency = this.currencySelect.val();
-            
-            if (!currency) {
-                this.showError('Please select a cryptocurrency');
-                return false;
-            }
-            
-            return true;
-        },
-        
-        onPaymentMethodSelect: function(e, paymentMethod) {
-            if (paymentMethod === 'nimipay') {
-                this.initExchangeRates();
-            }
-        },
-        
-        showError: function(message) {
-            $('.woocommerce-error, .woocommerce-message').remove();
-            this.form.prepend(
-                $('<div class="woocommerce-error">' + message + '</div>')
-            );
-            $('html, body').animate({
-                scrollTop: this.form.offset().top - 100
+
+        startPaymentTimer: function() {
+            let timeLeft = 15 * 60; // 15 minutes
+            this.paymentTimer = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(this.paymentTimer);
+                    this.handlePaymentTimeout();
+                } else {
+                    const minutes = Math.floor(timeLeft / 60);
+                    const seconds = timeLeft % 60;
+                    $('.countdown').text(
+                        `${minutes}:${seconds.toString().padStart(2, '0')}`
+                    );
+                }
             }, 1000);
+        },
+
+        startPaymentPolling: function(paymentId) {
+            this.pollInterval = setInterval(() => {
+                $.ajax({
+                    url: nimipayParams.ajaxUrl,
+                    method: 'POST',
+                    data: {
+                        action: 'nimipay_check_payment',
+                        nonce: nimipayParams.nonce,
+                        payment_id: paymentId
+                    }
+                })
+                .done(response => {
+                    if (response.success) {
+                        this.updatePaymentStatus(response.data.status);
+                        if (['completed', 'failed'].includes(response.data.status)) {
+                            this.stopPolling();
+                            if (response.data.status === 'completed') {
+                                window.location.href = response.data.redirect_url;
+                            }
+                        }
+                    }
+                });
+            }, 5000); // Poll every 5 seconds
+        },
+
+        stopPolling: function() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+            }
+            if (this.paymentTimer) {
+                clearInterval(this.paymentTimer);
+            }
+        },
+
+        handlePaymentTimeout: function() {
+            this.stopPolling();
+            $('.wc-nimipay-status')
+                .removeClass('pending processing')
+                .addClass('failed')
+                .text('Payment time expired. Please try again.');
+        },
+
+        updatePaymentStatus: function(status) {
+            const statusElement = $('.wc-nimipay-status');
+            statusElement.removeClass('pending processing completed failed');
+            
+            switch (status) {
+                case 'processing':
+                    statusElement
+                        .addClass('processing')
+                        .text('Payment detected! Processing...');
+                    break;
+                case 'completed':
+                    statusElement
+                        .addClass('completed')
+                        .text('Payment completed successfully!');
+                    break;
+                case 'failed':
+                    statusElement
+                        .addClass('failed')
+                        .text('Payment failed. Please try again.');
+                    break;
+                default:
+                    statusElement
+                        .addClass('pending')
+                        .text('Waiting for payment...');
+            }
+        },
+
+        showLoading: function() {
+            this.paymentBox.append(
+                '<div class="wc-nimipay-loading"></div>'
+            );
+        },
+
+        hideLoading: function() {
+            $('.wc-nimipay-loading').remove();
+        },
+
+        showMessage: function(message, type) {
+            // Remove existing messages
+            $('.wc-nimipay-message').remove();
+            
+            const messageHtml = `
+                <div class="wc-nimipay-message ${type}">
+                    ${message}
+                </div>
+            `;
+            
+            this.paymentBox.prepend(messageHtml);
+            
+            // Auto-remove success messages after 3 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    $('.wc-nimipay-message.success').fadeOut();
+                }, 3000);
+            }
         }
     };
-    
+
     // Initialize on document ready
     $(document).ready(function() {
-        NimiPay.init();
-    });
-    
-    // Payment form template
-    const paymentFormTemplate = `
-        <div class="nimipay-payment-form">
-            <div class="currency-selection">
-                <label for="nimipay_currency">Select Cryptocurrency</label>
-                <select name="nimipay_currency" id="nimipay_currency" required>
-                    <option value="">Choose a cryptocurrency...</option>
-                    <option value="BTC">Bitcoin (BTC)</option>
-                    <option value="USDC">USD Coin (USDC)</option>
-                    <option value="UST">Terra USD (UST)</option>
-                </select>
-            </div>
-            
-            <div class="payment-details">
-                <div class="amount-display">
-                    <span class="fiat-amount"></span>
-                    <span class="equals">=</span>
-                    <span class="nimipay-crypto-amount"></span>
-                </div>
-                
-                <div class="payment-info">
-                    <div class="confirmation-info">
-                        <h4>Confirmation Requirements:</h4>
-                        <ul>
-                            <li class="btc-info" style="display: none;">
-                                Bitcoin: 2 confirmations (~20 minutes)
-                            </li>
-                            <li class="usdc-info" style="display: none;">
-                                USDC: 12 confirmations (~3 minutes)
-                            </li>
-                            <li class="ust-info" style="display: none;">
-                                UST: 15 confirmations (~1 minute)
-                            </li>
-                        </ul>
-                    </div>
-                    
-                    <div class="fee-info">
-                        <h4>Network Fees:</h4>
-                        <ul>
-                            <li class="btc-info" style="display: none;">
-                                Bitcoin: Network fee applies
-                            </li>
-                            <li class="usdc-info" style="display: none;">
-                                USDC: Gas fees covered
-                            </li>
-                            <li class="ust-info" style="display: none;">
-                                UST: Network fee applies
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Add payment form to checkout
-    $(document.body).on('updated_checkout payment_method_selected', function() {
-        const paymentMethod = $('#payment_method_nimipay');
-        if (paymentMethod.length && !$('.nimipay-payment-form').length) {
-            paymentMethod.closest('.payment_method_nimipay')
-                .find('.payment_box')
-                .html(paymentFormTemplate);
+        if ($('form.checkout').length) {
+            NimipayCheckout.init();
         }
     });
-    
-    // Update displayed information based on currency selection
-    $(document.body).on('change', '#nimipay_currency', function() {
-        const currency = $(this).val();
-        $('.confirmation-info li, .fee-info li').hide();
-        if (currency) {
-            $('.' + currency.toLowerCase() + '-info').show();
-        }
-    });
-    
+
 })(jQuery);
