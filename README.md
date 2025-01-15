@@ -1,232 +1,211 @@
-# NimiPay Payment Gateway
+# NimiPay POS Gateway
 
-A multi-currency cryptocurrency payment gateway supporting BTC, USDC, and UST with gas abstraction.
+A modern payment gateway integrating Nimiq's browser-first blockchain with point-of-sale systems.
 
 ## Features
 
-- Multiple cryptocurrency support:
-  - Bitcoin (BTC)
-  - USD Coin (USDC) with gas abstraction
-  - Terra USD (UST)
-- Platform integrations:
-  - WordPress/WooCommerce
-  - Wix
-  - Squarespace
-- Automatic exchange rate updates
-- Transaction monitoring
-- Comprehensive API
-- Security features
+- **Browser-Native Nimiq Integration**: Direct integration with @nimiq/core for browser-based blockchain interactions
+- **Multi-Currency Support**: Native support for NIM, BTC, USDC, and other cryptocurrencies
+- **Offline Capabilities**: Robust offline transaction handling and state management
+- **Platform Integrations**: Ready-to-use integrations for WordPress, Wix, and Squarespace
+
+## Architecture
+
+### Core Services
+
+- **NimiqNodeService**: Browser-based Nimiq node management
+- **PaymentFlowService**: Unified payment processing workflow
+- **TransactionQueueService**: Reliable transaction queueing and processing
+- **StateManager**: Advanced state management with offline support
+- **MigrationManager**: Data migration and schema versioning
+
+### Directory Structure
+
+```
+nimipay-pos-gateway/
+├── src/
+│   ├── services/           # Core service implementations
+│   │   ├── NimiqNodeService.js
+│   │   ├── PaymentFlowService.js
+│   │   ├── TransactionQueueService.js
+│   │   ├── StateManager.js
+│   │   └── MigrationManager.js
+│   └── nimipay.js         # Main entry point
+├── tests/
+│   ├── unit/              # Unit tests
+│   ├── integration/       # Integration tests
+│   └── verification/      # Verification scripts
+├── config/               # Configuration files
+├── docs/                # Documentation
+└── integrations/        # Platform integrations
+    ├── wordpress/
+    ├── wix/
+    └── squarespace/
+```
 
 ## Installation
 
-### WordPress Plugin
-
-1. Download the latest release
-2. Upload to wp-content/plugins/
-3. Activate through WordPress admin
-4. Configure in WooCommerce > Settings > Payments
-
-Detailed instructions: [WordPress Integration Guide](integrations/wordpress/README.md)
-
-### Wix Integration
-
-1. Add custom element to your site
-2. Configure API keys
-3. Add payment button to checkout
-
-Detailed instructions: [Wix Integration Guide](integrations/wix/README.md)
-
-### Squarespace Integration
-
-1. Enable code injection
-2. Add header and footer code
-3. Configure API keys
-
-Detailed instructions: [Squarespace Integration Guide](integrations/squarespace/README.md)
-
-## API Documentation
-
-### Authentication
-
+1. Install dependencies:
 ```bash
-# API Key authentication
-curl -H "Authorization: Bearer YOUR_API_KEY" \
-     https://api.nimipay.com/v1/payments
+npm install
 ```
 
-### Create Payment
-
+2. Configure environment:
 ```bash
-curl -X POST https://api.nimipay.com/v1/payments \
-     -H "Authorization: Bearer YOUR_API_KEY" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "amount": 100.00,
-       "currency": "USDC",
-       "success_url": "https://your-site.com/success",
-       "cancel_url": "https://your-site.com/cancel"
-     }'
+cp .env.example .env
+# Edit .env with your settings
 ```
 
-### Get Payment Status
-
+3. Run setup:
 ```bash
-curl https://api.nimipay.com/v1/payments/PAYMENT_ID \
-     -H "Authorization: Bearer YOUR_API_KEY"
+npm run setup
 ```
 
-### Get Exchange Rates
+## Usage
 
-```bash
-curl https://api.nimipay.com/v1/exchange-rates \
-     -H "Authorization: Bearer YOUR_API_KEY"
+### Basic Implementation
+
+```javascript
+import { PaymentFlowService } from 'nimipay-pos-gateway';
+
+// Initialize payment service
+const paymentFlow = new PaymentFlowService();
+await paymentFlow.initialize();
+
+// Process payment
+const result = await paymentFlow.processPayment({
+  id_invoice: "123",
+  amount: 100,
+  currency: "NIM"
+});
+
+// Monitor status
+paymentFlow.getTransactionStatus(result.txId).then(status => {
+  console.log("Payment status:", status);
+});
 ```
 
-### Webhook Events
+### Offline Support
 
-```json
-{
-  "event": "payment.completed",
-  "data": {
-    "payment_id": "pay_123",
-    "status": "completed",
-    "amount": 100.00,
-    "currency": "USDC"
-  }
-}
+```javascript
+// Transactions are automatically queued when offline
+window.addEventListener("offline", () => {
+  console.log("Switched to offline mode");
+});
+
+// Queued transactions are processed when back online
+window.addEventListener("online", () => {
+  console.log("Reconnected - processing queued transactions");
+});
 ```
 
-## Configuration
+### Multi-Currency Support
 
-### Environment Variables
+```javascript
+// Configure supported currencies
+const currencies = {
+  NIM: { type: "native", decimals: 4 },
+  BTC: { type: "native", decimals: 8 },
+  USDC: { type: "erc20", decimals: 6 }
+};
 
-```bash
-# API Configuration
-NIMIPAY_API_KEY=your_api_key
-NIMIPAY_TEST_MODE=true
-
-# Network Configuration
-NIMIPAY_ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR-PROJECT-ID
-NIMIPAY_TERRA_LCD_URL=https://lcd.terra.dev
-
-# Gas Abstraction
-NIMIPAY_MAX_GAS_PRICE=100 # in gwei
-NIMIPAY_GAS_PRICE_BUFFER=1.2 # 20% buffer
-
-# Security
-NIMIPAY_WEBHOOK_SECRET=your_webhook_secret
-NIMIPAY_RATE_LIMIT=100 # requests per minute
-```
-
-### Currency Configuration
-
-```json
-{
-  "BTC": {
-    "decimals": 8,
-    "min_amount": 0.00001,
-    "max_amount": 100,
-    "confirmations": {
-      "mainnet": 2,
-      "testnet": 1
-    }
-  },
-  "USDC": {
-    "decimals": 6,
-    "min_amount": 1,
-    "max_amount": 1000000,
-    "confirmations": {
-      "mainnet": 12,
-      "testnet": 5
-    }
-  },
-  "UST": {
-    "decimals": 6,
-    "min_amount": 1,
-    "max_amount": 1000000,
-    "confirmations": {
-      "mainnet": 15,
-      "testnet": 5
-    }
-  }
-}
+// Process payment in any supported currency
+const payment = await paymentFlow.processPayment({
+  amount: 100,
+  currency: "USDC"
+});
 ```
 
 ## Development
 
-### Requirements
-
-- PHP 7.4+
-- Node.js 14+
-- Composer
-- WordPress 5.0+ (for WP integration)
-
-### Setup
+### Setup Development Environment
 
 ```bash
 # Install dependencies
-composer install
 npm install
 
-# Build assets
-npm run build
-
 # Run tests
-composer test
 npm test
 
-# Start development server
-npm run dev
+# Run integration tests
+npm run test:integration
+
+# Build for production
+npm run build
 ```
 
-### Testing
+### Running Tests
 
 ```bash
-# Unit tests
-composer test:unit
+# Run all tests
+npm test
 
-# Integration tests
-composer test:integration
+# Run specific test suite
+npm test -- --grep "PaymentFlow"
 
-# E2E tests
-npm run test:e2e
-
-# Coverage report
-composer test:coverage
+# Run with coverage
+npm run test:coverage
 ```
 
-## Security
+## Migration
 
-### Best Practices
+### Running Migrations
 
-1. Always use HTTPS
-2. Validate all user input
-3. Keep dependencies updated
-4. Monitor transactions
-5. Use rate limiting
-6. Implement proper error handling
+```javascript
+import { MigrationManager } from 'nimipay-pos-gateway';
 
-### Known Issues
+const migrationManager = new MigrationManager();
 
-See [SECURITY.md](SECURITY.md) for details.
+// Run migrations
+const result = await migrationManager.migrate({
+  validateData: true,
+  backupEnabled: true
+});
+
+console.log(`Migration completed: v${result.fromVersion} -> v${result.toVersion}`);
+```
+
+### Rollback Procedure
+
+```javascript
+// Automatic rollback on failure
+try {
+  await migrationManager.migrate();
+} catch (error) {
+  // Migration failed - automatic rollback will occur
+  console.error("Migration failed:", error);
+}
+```
+
+## API Documentation
+
+Detailed API documentation is available in the [/docs](/docs) directory:
+
+- [API Reference](docs/API_REFERENCE.md)
+- [Integration Guide](docs/INTEGRATION_GUIDE.md)
+- [Migration Guide](docs/MIGRATION_GUIDE.md)
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-## Support
-
-- Documentation: https://docs.nimipay.com
-- Issues: https://github.com/nimipay/gateway/issues
-- Email: support@nimipay.com
-- Discord: https://discord.gg/nimipay
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For support, please:
+
+1. Check the [Documentation](docs/)
+2. Search [Issues](https://github.com/Andjroo111/nimipay-pos-gateway/issues)
+3. Create a new issue if needed
+
+## Acknowledgments
+
+- Nimiq Team for the excellent [@nimiq/core](https://github.com/nimiq/core) implementation
+- Contributors and testers
